@@ -18,8 +18,13 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
+      - name: Install SwiftLint
+        run: |
+          curl -L https://github.com/realm/SwiftLint/releases/download/0.54.0/SwiftLint.pkg -o SwiftLint.pkg
+          sudo installer -pkg SwiftLint.pkg -target /
+
       - name: Run SwiftLint
-        uses: realm/SwiftLint@v1
+        run: swiftlint lint --reporter github
 
       - name: Build package
         run: swift build -v
