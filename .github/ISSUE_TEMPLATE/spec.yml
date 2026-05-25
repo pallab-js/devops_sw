@@ -1,0 +1,27 @@
+name: Feature Spec
+description: Define a feature spec for DevForge
+labels: ["spec:story"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What does this feature accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Bullet list of verifiable conditions
+    validations:
+      required: true
+  - type: textarea
+    id: edge_cases
+    attributes:
+      label: Edge Cases & Constraints
+  - type: textarea
+    id: ai_prompt_hint
+    attributes:
+      label: AI Prompt Hint
+      description: Suggested prompt fragment for OpenCode AI

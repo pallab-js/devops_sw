@@ -1,0 +1,22 @@
+line_length: 120
+file_length: 400
+type_body_length: 500
+
+opt_in_rules:
+  - empty_count
+  - trailing_whitespace
+  - unused_imports
+
+disabled_rules:
+  - todo
+  - identifier_name
+
+force_cast: error
+force_try: error
+
+included:
+  - DevForge
+
+excluded:
+  - DerivedData
+  - .build

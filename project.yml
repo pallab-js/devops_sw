@@ -1,0 +1,67 @@
+name: DevForge
+options:
+  bundleIdPrefix: com.yourname
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.4"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    ARCHS: "$(ARCHS_STANDARD)"
+    ONLY_ACTIVE_ARCH: YES
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    OTHER_LINKER_FLAGS: "-lproc"
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  DevForge:
+    type: application
+    platform: macOS
+    sources:
+      - path: DevForge
+        excludes:
+          - "Tests/"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yourname.devforge
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: DevForge/Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: DevForge/DevForge-Bridging-Header.h
+        METAL_LIBRARY_FILE_BASE_NAME: default
+        LIBRARY_SEARCH_PATHS: /usr/lib
+    dependencies:
+      - package: GRDB
+        product: GRDB
+      - package: KeychainSwift
+        product: KeychainSwift
+    preBuildScripts:
+      - name: SwiftLint
+        script: swiftlint lint --strict --quiet
+        basedOnDependencyAnalysis: false
+
+  DevForgeUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - DevForge/Tests/UITests
+    dependencies:
+      - target: DevForge
+    settings:
+      base:
+        TEST_TARGET_NAME: DevForge
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    versionRange: ~> 6.0.0
+  KeychainSwift:
+    url: https://github.com/evgenyneu/keychain-swift
+    versionRange: ~> 20.0.0

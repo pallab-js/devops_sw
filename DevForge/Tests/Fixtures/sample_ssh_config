@@ -1,0 +1,23 @@
+# SSH Config managed by DevForge
+
+Host myserver
+    HostName 192.168.1.100
+    User admin
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+    ForwardAgent yes
+
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_ed25519
+
+Host database-prod
+    HostName db.example.com
+    User dba
+    Port 5432
+    ProxyJump bastion.example.com
+
+Host * 
+    ServerAliveInterval 60
+    StrictHostKeyChecking accept-new
