@@ -2,15 +2,15 @@ import SwiftUI
 
 extension Color {
     static let appAccent = Color.accentColor
-    static let appBackground = Color(NSColor.controlBackgroundColor)
-    static let appSecondaryBackground = Color(NSColor.underPageBackgroundColor)
-    static let appText = Color(NSColor.labelColor)
-    static let appSecondaryText = Color(NSColor.secondaryLabelColor)
-    static let appTertiaryText = Color(NSColor.tertiaryLabelColor)
-    static let appSeparator = Color(NSColor.separatorColor)
-    static let appSelectedBackground = Color(NSColor.selectedContentBackgroundColor)
-    static let appSelectedText = Color(NSColor.selectedMenuItemTextColor)
-    static let appBorder = Color(NSColor.gridColor)
+    static let appBackground = Color(.controlBackgroundColor)
+    static let appSecondaryBackground = Color(.underPageBackgroundColor)
+    static let appText = Color(.labelColor)
+    static let appSecondaryText = Color(.secondaryLabelColor)
+    static let appTertiaryText = Color(.tertiaryLabelColor)
+    static let appSeparator = Color(.separatorColor)
+    static let appSelectedBackground = Color(.selectedContentBackgroundColor)
+    static let appSelectedText = Color(.selectedMenuItemTextColor)
+    static let appBorder = Color(.gridColor)
 
     static let statusGreen = Color.green
     static let statusYellow = Color.yellow

@@ -20,8 +20,18 @@ final class AppDatabase: Sendable {
 
     private init() {
         let url = Self.databaseURL()
-        dbPool = try! DatabasePool(path: url.path)
-        try! migrator.migrate(dbPool)
+        var pool: DatabasePool
+        if let p = try? DatabasePool(path: url.path) {
+            pool = p
+        } else {
+            let fallbackURL = Self.fallbackDatabaseURL()
+            try? FileManager.default.createDirectory(at: fallbackURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            pool = try! DatabasePool(path: fallbackURL.path)
+        }
+        dbPool = pool
+        if let migrator = try? migrator.migrate(dbPool) {
+            // migration succeeded
+        }
     }
 
     static func databaseURL() -> URL {
@@ -30,6 +40,13 @@ final class AppDatabase: Sendable {
             in: .userDomainMask
         ).first!
         let directory = appSupport.appendingPathComponent("com.devforge.app", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("devforge.sqlite")
+    }
+
+    static func fallbackDatabaseURL() -> URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let directory = caches.appendingPathComponent("com.devforge.app", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("devforge.sqlite")
     }
@@ -79,14 +96,32 @@ final class AppDatabase: Sendable {
                 t.column("exitCode", .integer)
             }
         }
+        migrator.registerMigration("v2_add_indexes") { db in
+            try db.create(indexOn: "envVariable", columns: ["envFileId"])
+            try db.create(indexOn: "processRecord", columns: ["status"])
+            try db.create(indexOn: "processRecord", columns: ["createdAt"])
+            try db.create(indexOn: "taskRun", columns: ["taskName"])
+        }
+        migrator.registerMigration("v3_add_git_repository") { db in
+            try db.create(table: "gitRepository") { t in
+                t.column("id", .text).primaryKey()
+                t.column("localPath", .text).notNull()
+                t.column("name", .text).notNull()
+                t.column("currentBranch", .text)
+                t.column("isDirty", .integer).notNull()
+                t.column("lastCommitMessage", .text)
+                t.column("lastCommitDate", .datetime)
+                t.column("remoteURL", .text)
+            }
+        }
         return migrator
     }
 
-    func write<T>(_ block: @escaping (Database) throws -> T) async throws -> T {
+    func write<T>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
         try await dbPool.write(block)
     }
 
-    func read<T>(_ block: @escaping (Database) throws -> T) async throws -> T {
+    func read<T>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
         try await dbPool.read(block)
     }
 

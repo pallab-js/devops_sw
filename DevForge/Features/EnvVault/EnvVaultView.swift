@@ -43,10 +43,15 @@ struct EnvVaultView: View {
 
     private var fileList: some View {
         List(envFiles, selection: $selectedFile) { file in
-            VStack(alignment: .leading) {
-                Text(file.name).font(.appBody)
-                Text(file.projectPath).font(.appCaption).foregroundStyle(.secondary)
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(.purple)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file.name).font(.appBody.bold())
+                    Text(file.projectPath).font(.appCaption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
+            .padding(.vertical, 4)
             .tag(file)
         }
         .listStyle(.inset)
@@ -62,10 +67,19 @@ struct EnvVaultView: View {
     private func variableList(file: EnvFile) -> some View {
         VStack(spacing: 0) {
             HStack {
-                Text(file.name).font(.appHeadline)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(file.name).font(.appTitle3.bold())
+                    Text(file.projectPath).font(.appCaption).foregroundStyle(.secondary)
+                }
                 Spacer()
-                Button("Import .env") { showImportPicker = true }
-                Button("Export") { exportFile(file: file) }
+                HStack(spacing: 8) {
+                    ActionButton(title: "Import .env", icon: "square.and.arrow.down", color: .purple) {
+                        showImportPicker = true
+                    }
+                    ActionButton(title: "Export", icon: "square.and.arrow.up", color: .blue) {
+                        exportFile(file: file)
+                    }
+                }
             }
             .padding()
             Divider()
@@ -78,6 +92,7 @@ struct EnvVaultView: View {
                     )
                 }
             }
+            .listStyle(.inset)
             .task(id: file.id) { await loadVariables(for: file.id) }
         }
     }
@@ -144,33 +159,79 @@ struct VariableRowView: View {
     let onToggleSecret: () -> Void
     let onDelete: () -> Void
     @State private var showValue = false
+    @State private var isHovered = false
 
     var body: some View {
-        HStack {
-            Text(variable.key).font(.appMonospaceSmall)
-                .frame(width: 120, alignment: .leading)
-            if showValue {
-                Text(variable.value).font(.appMonospaceSmall)
-            } else if variable.isSecret {
-                Text("••••••••").foregroundStyle(.secondary)
-            } else {
-                Text(variable.value).font(.appMonospaceSmall)
+        HStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.xxs) {
+                Image(systemName: "key.fill")
+                    .font(.caption)
+                    .foregroundStyle(.purple)
+                Text(variable.key)
+                    .font(.appMonospaceSmall.bold())
             }
-            Spacer()
-            if variable.isSecret {
-                Button(action: { showValue.toggle() }) {
-                    Image(systemName: showValue ? "eye.slash" : "eye")
+            .frame(width: 160, alignment: .leading)
+            
+            Group {
+                if showValue || !variable.isSecret {
+                    Text(variable.value)
+                        .font(.appMonospaceSmall)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text("••••••••")
+                        .font(.appMonospaceSmall)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
             }
-            Button(action: onToggleSecret) {
-                Image(systemName: variable.isSecret ? "lock.fill" : "lock.open")
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.appSecondaryBackground.opacity(0.5))
+            .cornerRadius(4)
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                if variable.isSecret {
+                    IconButton(icon: showValue ? "eye.slash" : "eye", color: .secondary) {
+                        showValue.toggle()
+                    }
+                }
+                IconButton(icon: variable.isSecret ? "lock.fill" : "lock.open", color: variable.isSecret ? .purple : .secondary, action: onToggleSecret)
+                IconButton(icon: "trash", color: .red, action: onDelete)
             }
-            .buttonStyle(.plain)
-            Button(action: onDelete) {
-                Image(systemName: "trash")
+        }
+        .padding(.vertical, Spacing.xxs)
+        .padding(.horizontal, 10)
+        .background(isHovered ? Color.appSecondaryBackground.opacity(0.3) : Color.clear)
+        .cornerRadius(6)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
             }
-            .buttonStyle(.plain)
+        }
+    }
+}
+
+struct IconButton: View {
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.caption.bold())
+                .foregroundStyle(color.opacity(isHovered ? 1.0 : 0.65))
+                .frame(width: 24, height: 24)
+                .background(isHovered ? color.opacity(0.12) : Color.clear)
+                .cornerRadius(4)
+                .scaleEffect(isHovered ? 1.1 : 1.0)
+                .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }

@@ -33,7 +33,7 @@ struct GitRepository: Identifiable, Codable, FetchableRecord, PersistableRecord,
 }
 
 struct GitCommit: Identifiable {
-    let id = UUID()
+    var id: String { sha }
     let sha: String
     let message: String
     let author: String
@@ -44,7 +44,7 @@ struct GitCommit: Identifiable {
 }
 
 struct GitFileStatus: Identifiable {
-    let id = UUID()
+    var id: String { "\(path).\(statusCode.rawValue)" }
     let path: String
     let statusCode: GitStatusType
 }
@@ -63,16 +63,6 @@ enum GitStatusType: String {
         case .deleted: "Deleted"
         case .untracked: "Untracked"
         case .renamed: "Renamed"
-        }
-    }
-
-    var color: String {
-        switch self {
-        case .modified: "yellow"
-        case .added: "green"
-        case .deleted: "red"
-        case .untracked: "gray"
-        case .renamed: "blue"
         }
     }
 }

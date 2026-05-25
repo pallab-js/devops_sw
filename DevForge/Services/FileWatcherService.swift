@@ -4,6 +4,7 @@ actor FileWatcherService {
     static let shared = FileWatcherService()
 
     private var watchers: [String: AsyncStream<URL>.Continuation] = [:]
+    private var sources: [String: DispatchSourceFileSystemObject] = [:]
 
     func watch(url: URL) -> AsyncStream<URL> {
         let (stream, continuation) = AsyncStream<URL>.makeStream()
@@ -21,16 +22,19 @@ actor FileWatcherService {
             eventMask: .write,
             queue: .global()
         )
-        source.setEventHandler { [weak self] in
+        source.setEventHandler {
             continuation.yield(url)
         }
         source.setCancelHandler {
             close(descriptor)
         }
         source.resume()
+        sources[key] = source
 
-        continuation.onTermination = { _ in
-            source.cancel()
+        continuation.onTermination = { [weak self] _ in
+            Task { [weak self] in
+                await self?.stopWatching(url: url)
+            }
         }
 
         return stream
@@ -38,14 +42,18 @@ actor FileWatcherService {
 
     func stopWatching(url: URL) {
         let key = url.path
+        sources[key]?.cancel()
+        sources.removeValue(forKey: key)
         watchers[key]?.finish()
         watchers.removeValue(forKey: key)
     }
 
     func stopAll() {
-        for (_, continuation) in watchers {
-            continuation.finish()
+        for (key, source) in sources {
+            source.cancel()
+            watchers[key]?.finish()
         }
+        sources.removeAll()
         watchers.removeAll()
     }
 }

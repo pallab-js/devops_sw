@@ -13,10 +13,19 @@ struct DiscoveredTask: Identifiable, Hashable {
         case packageJSON = "package.json"
         case justfile = "Justfile"
     }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(sourceFile)
+    }
+
+    static func == (lhs: DiscoveredTask, rhs: DiscoveredTask) -> Bool {
+        lhs.name == rhs.name && lhs.sourceFile == rhs.sourceFile
+    }
 }
 
 struct TaskOutputLine: Identifiable, Sendable {
-    let id = UUID()
+    var id: String { "\(timestamp.timeIntervalSince1970).\(content)" }
     let content: String
     let isError: Bool
     let timestamp: Date

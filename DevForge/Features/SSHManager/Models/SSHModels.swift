@@ -29,17 +29,6 @@ struct SSHHost: Identifiable, Codable, Hashable {
         self.proxyJump = proxyJump
         self.forwardAgent = forwardAgent
     }
-
-    var sshCommand: String {
-        var cmd = "ssh"
-        if !user.isEmpty { cmd += " \(user)@\(hostname)" }
-        if !hostname.isEmpty && user.isEmpty { cmd += " \(hostname)" }
-        if port != 22 { cmd += " -p \(port)" }
-        if !identityFile.isEmpty { cmd += " -i \(identityFile)" }
-        if !proxyJump.isEmpty { cmd += " -J \(proxyJump)" }
-        if forwardAgent { cmd += " -A" }
-        return cmd
-    }
 }
 
 struct PortForwardRule: Identifiable {

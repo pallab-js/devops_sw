@@ -3,25 +3,29 @@ import Foundation
 actor DataExporter {
     static let shared = DataExporter()
 
-    func exportAllData() async throws -> Data {
+    func exportAll(to url: URL) async throws {
         var export: [String: Any] = [:]
 
         let processes: [ProcessRecord] = try await AppDatabase.shared.read { db in
             try ProcessRecord.fetchAll(db)
         }
-        export["processes"] = processes.map { try? JSONEncoder().encode($0) }
+        let processesData = try processes.map { try JSONEncoder().encode($0) }
+        export["processes"] = processesData
 
         let envFiles: [EnvFile] = try await AppDatabase.shared.read { db in
             try EnvFile.fetchAll(db)
         }
-        export["envFiles"] = envFiles.map { try? JSONEncoder().encode($0) }
+        let envFilesData = try envFiles.map { try JSONEncoder().encode($0) }
+        export["envFiles"] = envFilesData
 
         let repos: [GitRepository] = try await AppDatabase.shared.read { db in
             try GitRepository.fetchAll(db)
         }
-        export["repositories"] = repos.map { try? JSONEncoder().encode($0) }
+        let reposData = try repos.map { try JSONEncoder().encode($0) }
+        export["repositories"] = reposData
 
-        return try JSONSerialization.data(withJSONObject: export, options: .prettyPrinted)
+        let jsonData = try JSONSerialization.data(withJSONObject: export, options: .prettyPrinted)
+        try jsonData.write(to: url, options: .atomic)
     }
 
     func importData(from url: URL) async throws {

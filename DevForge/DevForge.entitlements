@@ -7,18 +7,26 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
     <key>com.apple.security.network.client</key>
-    <false/>
+    <true/>
     <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
     <array>
         <string>/var/run/docker.sock</string>
         <string>/usr/local/bin/</string>
         <string>/opt/homebrew/bin/</string>
     </array>
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+    <array>
+        <string>/var/log/</string>
+    </array>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
     <key>com.apple.security.process-info</key>
     <true/>
-    <key>keychain-access-groups</key>
+<key>keychain-access-groups</key>
     <array>
-        <string>$(AppIdentifierPrefix)com.yourname.devforge</string>
+        <string>$(AppIdentifierPrefix)com.devforge.app</string>
     </array>
 </dict>
 </plist>

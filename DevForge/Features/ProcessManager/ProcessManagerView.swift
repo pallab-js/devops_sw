@@ -51,7 +51,7 @@ struct ProcessManagerView: View {
         ProcessDetailView(
             process: process,
             onStart: { Task { await startProcess(process) } },
-            onStop: { stopProcess(process) },
+            onStop: { Task { await stopProcess(process) } },
             onDelete: { Task { await deleteProcess(process) } }
         )
     }
@@ -61,9 +61,7 @@ struct ProcessManagerView: View {
             processes = try await AppDatabase.shared.read { db in
                 try ProcessRecord.order(Column("createdAt").desc).fetchAll(db)
             }
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     private func saveProcess(_ record: ProcessRecord) async {
@@ -72,9 +70,7 @@ struct ProcessManagerView: View {
                 try record.insert(db)
             }
             await loadProcesses()
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     private func startProcess(_ record: ProcessRecord) async {
@@ -83,18 +79,16 @@ struct ProcessManagerView: View {
             if let idx = processes.firstIndex(where: { $0.id == updated.id }) {
                 processes[idx] = updated
             }
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
-    private func stopProcess(_ record: ProcessRecord) {
-        ProcessService.shared.terminate(recordID: record.id)
+    private func stopProcess(_ record: ProcessRecord) async {
+        await ProcessService.shared.terminate(recordID: record.id)
     }
 
     private func deleteProcess(_ record: ProcessRecord) async {
+        await ProcessService.shared.terminate(recordID: record.id)
         do {
-            stopProcess(record)
             try await AppDatabase.shared.write { db in
                 try record.delete(db)
             }
@@ -102,9 +96,7 @@ struct ProcessManagerView: View {
             if selectedProcess?.id == record.id {
                 selectedProcess = nil
             }
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 }
 
@@ -113,23 +105,32 @@ struct ProcessRowView: View {
 
     var body: some View {
         HStack(spacing: Spacing.sm) {
-            statusDot
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(process.name)
-                    .font(.appBody)
+                    .font(.appBody.bold())
                 Text(process.command)
                     .font(.appCaption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            Spacer()
+            statusBadge
         }
         .padding(.vertical, Spacing.xxs)
     }
 
-    private var statusDot: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
+    private var statusBadge: some View {
+        Text(process.status.rawValue.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(statusColor.opacity(0.12))
+            .foregroundStyle(statusColor)
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(statusColor.opacity(0.3), lineWidth: 1)
+            )
     }
 
     private var statusColor: Color {
@@ -149,6 +150,7 @@ struct ProcessDetailView: View {
     let onDelete: () -> Void
 
     @State private var logLines: [LogLine] = []
+    @State private var isRestarting = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -159,40 +161,139 @@ struct ProcessDetailView: View {
                 .padding(.horizontal)
                 .padding(.vertical, Spacing.xs)
             Divider()
-            LogTailView(logLines: logLines)
+            LogTailView(logLines: logLines, onClear: { logLines.removeAll() })
         }
         .task {
-            guard let stream = ProcessService.shared.observe(recordID: process.id) else { return }
+            guard let stream = await ProcessService.shared.observe(recordID: process.id) else { return }
             for await line in stream {
                 logLines.append(line)
+                if logLines.count > 10000 {
+                    logLines.removeFirst(logLines.count - 5000)
+                }
             }
         }
     }
 
     private var infoSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(process.name)
-                .font(.appHeadline)
-            LabeledContent("Command", value: process.command)
-            LabeledContent("Working Dir", value: process.workingDirectory)
-            LabeledContent("PID", value: process.pid.map(String.init) ?? "—")
-            LabeledContent("Status", value: process.status.rawValue.capitalized)
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack {
+                Text(process.name)
+                    .font(.appTitle3.bold())
+                Spacer()
+                statusBadge(process.status)
+            }
+            .padding(.bottom, 2)
+            
+            VStack(spacing: Spacing.xxs) {
+                detailRow(label: "Command", value: process.command)
+                detailRow(label: "Working Directory", value: process.workingDirectory)
+                detailRow(label: "PID", value: process.pid.map(String.init) ?? "\u{2014}")
+            }
         }
+        .padding()
+        .background(.ultraThinMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+    }
+    
+    private func detailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.appCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+            Text(value)
+                .font(.appCaption.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    
+    private func statusBadge(_ status: ProcessStatus) -> some View {
+        let color: Color = {
+            switch status {
+            case .running: return .statusGreen
+            case .idle, .stopped: return .statusGray
+            case .failed, .crashed: return .statusRed
+            }
+        }()
+        
+        return Text(status.rawValue.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .foregroundStyle(color)
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(color.opacity(0.3), lineWidth: 1)
+            )
     }
 
     private var actionBar: some View {
         HStack(spacing: Spacing.sm) {
-            Button("Start", action: onStart)
+            ActionButton(title: "Start", icon: "play.fill", color: .statusGreen, action: onStart)
                 .disabled(process.status == .running)
-            Button("Stop", action: onStop)
+            
+            ActionButton(title: "Stop", icon: "stop.fill", color: .statusRed, action: onStop)
                 .disabled(process.status != .running)
-            Button("Restart") {
-                onStop()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onStart() }
+            
+            ActionButton(title: "Restart", icon: "arrow.clockwise", color: .orange) {
+                guard !isRestarting else { return }
+                isRestarting = true
+                Task {
+                    await ProcessService.shared.terminate(recordID: process.id)
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    await ProcessService.shared.waitForTermination(recordID: process.id)
+                    onStart()
+                    isRestarting = false
+                }
             }
-            .disabled(process.status != .running && process.status != .stopped)
+            .disabled(isRestarting || (process.status != .running && process.status != .stopped))
+            
             Spacer()
-            Button("Delete", role: .destructive, action: onDelete)
+            
+            ActionButton(title: "Delete", icon: "trash", color: .red, role: .destructive, action: onDelete)
+        }
+    }
+}
+
+struct ActionButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    var role: ButtonRole? = nil
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .font(.appCaption.bold())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isEnabled ? color.opacity(isHovered ? 0.25 : 0.12) : Color.gray.opacity(0.08))
+            .foregroundStyle(isEnabled ? color : Color.secondary)
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isEnabled ? color.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+            .scaleEffect(isHovered && isEnabled ? 1.03 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }

@@ -134,7 +134,7 @@ actor SystemMetricsService {
     }
 
     private func readDiskIO() -> (readMBs: Double, writeMBs: Double) {
-        var previous = previousDisk ?? (0, 0)
+        let previous = previousDisk ?? (0, 0)
 
         var iterator: io_iterator_t = 0
         let matching = IOServiceMatching("IOBlockStorageDriver")
@@ -166,7 +166,7 @@ actor SystemMetricsService {
     }
 
     private func readNetwork() -> (upKBs: Double, downKBs: Double) {
-        var previous = previousNetwork ?? (0, 0)
+        let previous = previousNetwork ?? (0, 0)
 
         var ifList: UnsafeMutablePointer<ifaddrs>?
         getifaddrs(&ifList)

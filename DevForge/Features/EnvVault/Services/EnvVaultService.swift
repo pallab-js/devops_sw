@@ -76,8 +76,20 @@ actor EnvVaultService {
     func importFromFile(url: URL, envFileId: String) async throws -> [EnvVariable] {
         let content = try String(contentsOf: url, encoding: .utf8)
         let variables = try parseEnvContent(content, envFileId: envFileId)
-        for var variable in variables {
-            try await saveVariable(variable)
+        for variable in variables {
+            if variable.isSecret {
+                let keychainKey = "envfile.\(variable.envFileId).\(variable.key)"
+                try await keychain.set(variable.value, forKey: keychainKey)
+                var nonSecret = variable
+                nonSecret.value = ""
+                try await AppDatabase.shared.write { db in
+                    try nonSecret.save(db)
+                }
+            } else {
+                try await AppDatabase.shared.write { db in
+                    try variable.save(db)
+                }
+            }
         }
         return variables
     }
@@ -88,11 +100,7 @@ actor EnvVaultService {
             if variable.isSecret {
                 variable.value = try await resolveSecretValue(variable)
             }
-            if variable.value.contains(" ") || variable.value.contains("#") {
-                result += "\(variable.key)=\"\(variable.value)\"\n"
-            } else {
-                result += "\(variable.key)=\(variable.value)\n"
-            }
+            result += "\(variable.key)=\(shellQuote(variable.value))\n"
         }
         return result
     }
@@ -114,13 +122,21 @@ actor EnvVaultService {
             if variable.isSecret {
                 variable.value = try await resolveSecretValue(variable)
             }
-            if variable.value.contains(" ") {
-                result += "export \(variable.key)=\"\(variable.value)\"\n"
-            } else {
-                result += "export \(variable.key)=\(variable.value)\n"
-            }
+            result += "export \(variable.key)=\(shellQuote(variable.value))\n"
         }
         return result
+    }
+
+    private func shellQuote(_ value: String) -> String {
+        let specialChars = CharacterSet(charactersIn: " !\"#$&'()*,;<=>?[]^`{|}~\\")
+        if value.rangeOfCharacter(from: specialChars) != nil || value.isEmpty {
+            let escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "`", with: "\\`")
+                .replacingOccurrences(of: "$", with: "\\$")
+            return "\"\(escaped)\""
+        }
+        return value
     }
 
     private func parseEnvContent(_ content: String, envFileId: String) throws -> [EnvVariable] {

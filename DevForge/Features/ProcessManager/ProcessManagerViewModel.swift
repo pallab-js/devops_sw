@@ -16,9 +16,7 @@ final class ProcessManagerViewModel {
             processes = try await database.read { db in
                 try ProcessRecord.order(Column("createdAt").desc).fetchAll(db)
             }
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     func saveProcess(_ record: ProcessRecord) async {
@@ -27,9 +25,7 @@ final class ProcessManagerViewModel {
                 try record.insert(db)
             }
             await loadProcesses()
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     func startProcess(_ record: ProcessRecord) async {
@@ -38,9 +34,7 @@ final class ProcessManagerViewModel {
             if let idx = processes.firstIndex(where: { $0.id == updated.id }) {
                 processes[idx] = updated
             }
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     func stopProcess(_ record: ProcessRecord) async {
@@ -54,12 +48,10 @@ final class ProcessManagerViewModel {
                 try record.delete(db)
             }
             await loadProcesses()
-        } catch {
-            self.error = ErrorMessage(message: error.localizedDescription)
-        }
+        } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
-    func observeLogs(for record: ProcessRecord) -> AsyncStream<LogLine>? {
-        nil
+    func observeLogs(for record: ProcessRecord) async -> AsyncStream<LogLine>? {
+        await service.observe(recordID: record.id)
     }
 }

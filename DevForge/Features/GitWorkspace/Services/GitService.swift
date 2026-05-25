@@ -11,29 +11,35 @@ actor GitService {
         return "/usr/bin/git"
     }
 
-    func runGitCommand(
+    private func runGitCommand(
         args: [String],
         workingDirectory: String
     ) async throws -> (output: String, exitCode: Int32) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: gitPath())
-        process.arguments = args
-        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: gitPath())
+            process.arguments = args
+            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
 
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
 
-        try process.run()
-        process.waitUntilExit()
+            process.terminationHandler = { proc in
+                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: outputData, encoding: .utf8) ?? ""
+                let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+                continuation.resume(returning: (output + errorOutput, proc.terminationStatus))
+            }
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-
-        return (output + errorOutput, process.terminationStatus)
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
     }
 
     func getStatus(repoPath: String) async throws -> (branch: String?, files: [GitFileStatus]) {

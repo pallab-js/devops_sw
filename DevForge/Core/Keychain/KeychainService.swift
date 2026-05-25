@@ -3,7 +3,7 @@ import Security
 
 actor KeychainService {
     static let shared = KeychainService()
-    private let serviceName = "com.yourname.devforge.secrets"
+    private let serviceName = "com.devforge.app.secrets"
 
     private init() {}
 
@@ -17,7 +17,9 @@ actor KeychainService {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecAttrSynchronizable as String: false
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {

@@ -65,15 +65,15 @@ struct NewProcessSheet: View {
                 Spacer()
                 Button("Save") {
                     let record = ProcessRecord(
-                        name: name,
-                        command: command,
-                        workingDirectory: workingDirectory,
+                        name: name.trimmed,
+                        command: command.trimmed,
+                        workingDirectory: workingDirectory.trimmed,
                         environmentVariables: envVars
                     )
                     onSave(record)
                     dismiss()
                 }
-                .disabled(name.isEmpty || command.isEmpty)
+                .disabled(name.trimmed.isEmpty || command.trimmed.isEmpty)
             }
             .padding()
         }

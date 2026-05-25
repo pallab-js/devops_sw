@@ -53,22 +53,32 @@ actor GPUMetricsService {
         }
         let cmdQueue = device.makeCommandQueue()
         guard let queue = cmdQueue else { return 0 }
+
+        var outputBuffer: MTLBuffer? = device.makeBuffer(
+            length: MemoryLayout<Float>.size,
+            options: .storageModeShared
+        )
+        guard let buffer = outputBuffer else { return 0 }
+
         let start = CFAbsoluteTimeGetCurrent()
         let iterations = 50
         for _ in 0..<iterations {
             guard let cmdBuffer = queue.makeCommandBuffer(),
                   let encoder = cmdBuffer.makeComputeCommandEncoder() else { continue }
             encoder.setComputePipelineState(pipeline)
-            encoder.dispatchThreadgroups(
-                MTLSize(width: 1, height: 1, depth: 1),
-                threadsPerThreadgroup: MTLSize(width: 1, height: 1, depth: 1)
-            )
+            encoder.setBuffer(buffer, offset: 0, index: 0)
+            let threadGroupSize = MTLSize(width: 1, height: 1, depth: 1)
+            let threadGroups = MTLSize(width: 1, height: 1, depth: 1)
+            encoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
             encoder.endEncoding()
             cmdBuffer.commit()
             cmdBuffer.waitUntilCompleted()
         }
         let elapsed = CFAbsoluteTimeGetCurrent() - start
-        return min(elapsed * 10, 100)
+
+        let referenceTime = 0.5
+        let utilization = max(0, min(100, (referenceTime / elapsed) * 100))
+        return utilization
     }
 
     private let gpuKernelSource = """

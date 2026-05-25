@@ -2,9 +2,12 @@ import SwiftUI
 
 @main
 struct DevForgeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var database = AppDatabase.shared
     @State private var showGlobalSearch = false
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
+    @AppStorage("colorScheme") private var colorScheme = "auto"
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
 
     var body: some Scene {
         WindowGroup {
@@ -40,35 +43,44 @@ struct MainWindow: View {
     @Binding var hasLaunchedBefore: Bool
     @Binding var showGlobalSearch: Bool
     let database: AppDatabase
+    @AppStorage("colorScheme") private var colorScheme = "auto"
 
     var body: some View {
-        if !hasLaunchedBefore {
-            OnboardingView()
-        } else {
-            ContentView()
-                .environment(\.database, database)
-                .sheet(isPresented: $showGlobalSearch) {
-                    GlobalSearchView()
-                }
-                .onAppear { setupKeyboardShortcuts() }
-        }
-    }
-
-    private func setupKeyboardShortcuts() {
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.modifierFlags.contains(.command) && event.characters == "k" {
-                showGlobalSearch = true
-                return nil
+        Group {
+            if !hasLaunchedBefore {
+                OnboardingView()
+            } else {
+                ContentView()
+                    .environment(\.database, database)
+                    .sheet(isPresented: $showGlobalSearch) {
+                        GlobalSearchView()
+                    }
             }
-            return event
         }
+        .preferredColorScheme(colorScheme == "auto" ? nil : (colorScheme == "dark" ? ColorScheme.dark : ColorScheme.light))
     }
 }
 
 struct MenuBarExtraScene: Scene {
+    @State private var runningCount = 0
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+
     var body: some Scene {
-        MenuBarExtra("DevForge", systemImage: "terminal.fill") {
-            MenuBarExtraView()
+        MenuBarExtra("DevForge", systemImage: "terminal.fill", isInserted: $showMenuBarExtra) {
+            VStack {
+                Text("Running: \(runningCount)")
+                    .font(.caption)
+                Divider()
+                Button("Show DevForge") {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .option])
+                Divider()
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .keyboardShortcut("q", modifiers: .command)
+            }
         }
     }
 }

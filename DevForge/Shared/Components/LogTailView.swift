@@ -2,12 +2,23 @@ import SwiftUI
 
 struct LogTailView: View {
     let logLines: [LogLine]
+    let maxLines: Int = 10000
+    let onClear: (() -> Void)?
     @State private var autoScroll = true
     @State private var filterText = ""
     @State private var showErrorsOnly = false
 
+    init(logLines: [LogLine], onClear: (() -> Void)? = nil) {
+        self.logLines = logLines
+        self.onClear = onClear
+    }
+
+    private var displayLines: [LogLine] {
+        logLines.suffix(maxLines)
+    }
+
     private var filteredLines: [LogLine] {
-        var lines = logLines
+        var lines = displayLines
         if showErrorsOnly {
             lines = lines.filter { $0.isError }
         }
@@ -41,7 +52,7 @@ struct LogTailView: View {
                 }
             }
         }
-        .background(.black, in: Rectangle())
+        .background(Color(.textBackgroundColor), in: Rectangle())
     }
 
     private var toolbar: some View {
@@ -56,8 +67,8 @@ struct LogTailView: View {
             Toggle("Auto-scroll", isOn: $autoScroll)
                 .toggleStyle(.checkbox)
                 .controlSize(.small)
-            Button("Clear") {
-                // clearing is handled by parent via state
+            if let onClear {
+                Button("Clear", action: onClear)
             }
         }
     }

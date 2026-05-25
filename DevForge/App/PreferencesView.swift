@@ -20,6 +20,7 @@ struct PreferencesView: View {
 struct GeneralSettingsView: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    @State private var loginItemError: String?
 
     var body: some View {
         Form {
@@ -31,9 +32,18 @@ struct GeneralSettingsView: View {
                         } else {
                             try SMAppService.mainApp.unregister()
                         }
-                    } catch {}
+                        loginItemError = nil
+                    } catch {
+                        loginItemError = error.localizedDescription
+                        launchAtLogin = !newValue
+                    }
                 }
             Toggle("Show menu bar extra", isOn: $showMenuBarExtra)
+            if let err = loginItemError {
+                Text(err)
+                    .font(.appCaption)
+                    .foregroundStyle(Color.statusRed)
+            }
         }
         .formStyle(.grouped)
     }
@@ -68,19 +78,16 @@ struct ShortcutsSettingsView: View {
 
 struct DataSettingsView: View {
     @State private var dbSize = ""
+    @State private var isExporting = false
 
     var body: some View {
         Form {
             LabeledContent("Database Size", value: dbSize)
             HStack {
                 Button("Export All Data") {
-                    let panel = NSSavePanel()
-                    panel.nameFieldStringValue = "devforge-export.json"
-                    panel.begin { resp in
-                        guard resp == .OK, let url = panel.url else { return }
-                        // export logic
-                    }
+                    exportData()
                 }
+                .disabled(isExporting)
                 Spacer()
                 Button("Clear History", role: .destructive) {
                     Task {
@@ -101,7 +108,24 @@ struct DataSettingsView: View {
         if let size = attrs?[.size] as? Int64 {
             dbSize = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         } else {
-            dbSize = "—"
+            dbSize = "\u{2014}"
+        }
+    }
+
+    private func exportData() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "devforge-export.json"
+        panel.begin { resp in
+            guard resp == .OK, let url = panel.url else { return }
+            isExporting = true
+            Task {
+                do {
+                    try await DataExporter.shared.exportAll(to: url)
+                    await MainActor.run { isExporting = false }
+                } catch {
+                    await MainActor.run { isExporting = false }
+                }
+            }
         }
     }
 }

@@ -1,5 +1,4 @@
 import SwiftUI
-import Network
 
 struct SSHManagerView: View {
     @State private var hosts: [SSHHost] = []
@@ -20,7 +19,7 @@ struct SSHManagerView: View {
                 EmptyStateView(
                     icon: "network",
                     title: "No Host Selected",
-                    message: "Select or add an SSH host."
+                    message: "Select or add an SSH host to manage."
                 )
             }
         }
@@ -37,108 +36,206 @@ struct SSHManagerView: View {
 
     private var hostList: some View {
         List(hosts, selection: $selectedHost) { host in
-            HStack {
-                Circle()
-                    .fill(reachability[host.id] == true ? Color.statusGreen :
-                          reachability[host.id] == false ? Color.statusRed : Color.statusGray)
-                    .frame(width: 8, height: 8)
-                VStack(alignment: .leading) {
-                    Text(host.alias).font(.appBody)
-                    Text("\(host.user)@\(host.hostname)").font(.appCaption).foregroundStyle(.secondary)
+            HStack(spacing: Spacing.sm) {
+                SignalIndicatorView(isOnline: reachability[host.id])
+                
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(host.alias)
+                        .font(.appBody.bold())
+                    Text("\(host.user)@\(host.hostname)")
+                        .font(.appCaption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                Spacer()
             }
+            .padding(.vertical, Spacing.xxs)
             .tag(host)
         }
         .listStyle(.inset)
         .toolbar {
-            ToolbarItem { Button(action: { showAddHost = true }) { Label("Add", systemImage: "plus") } }
+            ToolbarItem {
+                Button(action: { showAddHost = true }) {
+                    Label("Add", systemImage: "plus")
+                }
+            }
         }
     }
 
     private func hostDetail(host: SSHHost) -> some View {
         VStack(spacing: 0) {
             HStack {
-                Text(host.alias).font(.appHeadline)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(host.alias)
+                        .font(.appTitle3.bold())
+                    Text("\(host.user)@\(host.hostname)")
+                        .font(.appCaption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
-                Button("Test") { Task { await testConnectivity(host: host) } }
-                Button("Connect") { openTerminal(host: host) }
+                
+                HStack(spacing: 8) {
+                    ActionButton(title: "Test", icon: "bolt.fill", color: .statusYellow) {
+                        Task { await testConnectivity(host: host) }
+                    }
+                    ActionButton(title: "Connect", icon: "terminal.fill", color: .statusGreen) {
+                        openTerminal(host: host)
+                    }
+                }
             }
             .padding()
-            Form {
-                LabeledContent("Hostname", value: host.hostname)
-                LabeledContent("User", value: host.user)
-                LabeledContent("Port", value: "\(host.port)")
-                LabeledContent("Identity File", value: host.identityFile.isEmpty ? "—" : host.identityFile)
-                LabeledContent("Proxy Jump", value: host.proxyJump.isEmpty ? "—" : host.proxyJump)
-                LabeledContent("Forward Agent", value: host.forwardAgent ? "Yes" : "No")
+            .background(.ultraThinMaterial)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(.white.opacity(0.1), lineWidth: 1)
+            )
+            .padding([.horizontal, .top])
+            
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("Connection Details")
+                    .font(.appHeadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, Spacing.xxs)
+                
+                VStack(spacing: Spacing.xs) {
+                    detailRow(label: "Hostname", value: host.hostname)
+                    detailRow(label: "User", value: host.user)
+                    detailRow(label: "Port", value: "\(host.port)")
+                    detailRow(label: "Identity File", value: host.identityFile.isEmpty ? "\u{2014}" : host.identityFile)
+                    detailRow(label: "Proxy Jump", value: host.proxyJump.isEmpty ? "\u{2014}" : host.proxyJump)
+                    detailRow(label: "Forward Agent", value: host.forwardAgent ? "Yes" : "No")
+                }
             }
-            .formStyle(.grouped)
+            .padding()
+            .background(.ultraThinMaterial)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(.white.opacity(0.08), lineWidth: 1)
+            )
+            .padding()
+            
             Divider()
+            
             portForwardSection
+        }
+    }
+    
+    private func detailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.appCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+            Text(value)
+                .font(.appCaption.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var portForwardSection: some View {
-        VStack(alignment: .leading) {
-            Text("Port Forwards").font(.appHeadline).padding()
-            List {
-                ForEach(portForwards) { rule in
-                    HStack {
-                        Text("localhost:\(rule.localPort) → \(rule.remoteHost):\(rule.remotePort)")
-                            .font(.appMonospaceSmall)
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { rule.isActive },
-                            set: { _ in toggleForward(rule) }
-                        ))
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Port Forwards")
+                .font(.appHeadline)
+                .padding(.horizontal)
+                .padding(.top, Spacing.sm)
+                
+            if portForwards.isEmpty {
+                Text("No port forwarding rules configured.")
+                    .font(.appCaption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, Spacing.md)
+            } else {
+                List {
+                    ForEach(portForwards) { rule in
+                        HStack {
+                            HStack(spacing: Spacing.xs) {
+                                Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.purple)
+                                Text("localhost:\(rule.localPort) \u{2192} \(rule.remoteHost):\(rule.remotePort)")
+                                    .font(.appMonospaceSmall)
+                            }
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { rule.isActive },
+                                set: { _ in toggleForward(rule) }
+                            ))
+                            .toggleStyle(.switch)
+                        }
+                        .padding(.vertical, Spacing.xs)
+                        .padding(.horizontal, Spacing.sm)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(.white.opacity(0.06), lineWidth: 1)
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
     }
 
     private func loadHosts() async {
         do {
-            hosts = try await SSHConfigParser.shared.loadHosts()
+            hosts = try await SSHHostService.shared.loadHosts()
         } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     private func addHost(_ host: SSHHost) async {
         hosts.append(host)
         do {
-            try await SSHConfigParser.shared.saveHosts(hosts)
+            try await SSHHostService.shared.saveHosts(hosts)
         } catch { self.error = ErrorMessage(message: error.localizedDescription) }
     }
 
     private func testConnectivity(host: SSHHost) async {
-        let conn = NWConnection(
-            host: NWEndpoint.Host(host.hostname),
-            port: NWEndpoint.Port(rawValue: UInt16(host.port)) ?? 22,
-            using: .tcp
-        )
-        conn.stateUpdateHandler = { state in
-            if state == .ready {
-                Task { @MainActor in
-                    self.reachability[host.id] = true
-                }
-                conn.cancel()
-            } else {
-                Task { @MainActor in
-                    self.reachability[host.id] = false
-                }
-            }
-        }
-        conn.start(queue: .global())
-        try? await Task.sleep(nanoseconds: 3_000_000_000)
-        conn.cancel()
+        reachability[host.id] = await SSHHostService.shared.testConnectivity(host: host)
     }
 
     private func openTerminal(host: SSHHost) {
-        Task { await SSHHostService.shared.openTerminal(host: host) }
+        Task {
+            await SSHHostService.shared.openTerminal(host: host)
+        }
     }
 
     private func toggleForward(_ rule: PortForwardRule) {
         // toggle port forward via process
+    }
+}
+
+struct SignalIndicatorView: View {
+    let isOnline: Bool?
+    
+    var body: some View {
+        let color: Color = {
+            switch isOnline {
+            case .some(true): return Color.statusGreen
+            case .some(false): return Color.statusRed
+            case .none: return Color.statusGray
+            }
+        }()
+        
+        return ZStack {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            
+            if isOnline == true {
+                Circle()
+                    .stroke(color.opacity(0.4), lineWidth: 2)
+                    .frame(width: 14, height: 14)
+                    .scaleEffect(1.2)
+            }
+        }
+        .frame(width: 16, height: 16)
     }
 }
 

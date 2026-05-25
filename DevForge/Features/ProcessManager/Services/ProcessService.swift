@@ -5,6 +5,7 @@ actor ProcessService {
 
     private var runningProcesses: [String: Process] = [:]
     private var continuations: [String: AsyncStream<LogLine>.Continuation] = [:]
+    private var streams: [String: AsyncStream<LogLine>] = [:]
 
     func spawn(record: ProcessRecord, database: AppDatabase) async throws -> ProcessRecord {
         let process = Process()
@@ -26,10 +27,17 @@ actor ProcessService {
 
         let recordID = record.id
         runningProcesses[recordID] = process
-        updatedRecord.setRunning(pid: process.processIdentifier)
+        updatedRecord.status = .running
+        updatedRecord.lastStartedAt = Date()
 
         let (stream, continuation) = AsyncStream<LogLine>.makeStream()
         continuations[recordID] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { [weak self] in
+                await self?.cleanup(recordID: recordID)
+            }
+        }
+        streams[recordID] = stream
 
         Task { [weak self] in
             self?.readPipe(
@@ -48,10 +56,12 @@ actor ProcessService {
             )
         }
 
+        let terminationContinuation = AsyncStream<Void>.makeStream()
         process.terminationHandler = { [weak self] proc in
             Task { [weak self] in
                 await self?.handleTermination(recordID: recordID, terminationStatus: proc.terminationStatus)
                 continuation.finish()
+                terminationContinuation.continuation.finish()
             }
         }
 
@@ -63,27 +73,35 @@ actor ProcessService {
         return updatedRecord
     }
 
-    func terminate(recordID: String) {
+    func terminate(recordID: String) async {
         guard let process = runningProcesses[recordID] else { return }
         process.terminate()
-        Task {
+        Task { [weak self, process] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
-            if process.isRunning {
+            guard let self = self else { return }
+            let stillActive = await self.isProcessActive(recordID)
+            if process.isRunning && stillActive {
                 process.terminate()
             }
         }
     }
 
-    func observe(recordID: String) -> AsyncStream<LogLine>? {
-        guard let continuation = continuations[recordID] else { return nil }
-        let stream = AsyncStream<LogLine> { c in
-            c.onTermination = { [weak self] _ in
-                Task { [weak self] in
-                    await self?.cleanup(recordID: recordID)
-                }
-            }
+    private func isProcessActive(_ recordID: String) -> Bool {
+        runningProcesses[recordID] != nil
+    }
+
+    func waitForTermination(recordID: String) async {
+        while runningProcesses[recordID] != nil {
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        return stream
+    }
+
+    func runningCount() -> Int {
+        runningProcesses.count
+    }
+
+    func observe(recordID: String) -> AsyncStream<LogLine>? {
+        streams[recordID]
     }
 
     func processExists(recordID: String) -> Bool {
@@ -118,7 +136,7 @@ actor ProcessService {
         Task {
             try? await AppDatabase.shared.write { db in
                 if var record = try? ProcessRecord.fetchOne(db, id: recordID) {
-                    record.status = terminationStatus == 0 ? .stopped : .failed
+                    record.status = status
                     record.pid = nil
                     try record.save(db)
                 }
@@ -129,6 +147,7 @@ actor ProcessService {
     private func cleanup(recordID: String) {
         runningProcesses.removeValue(forKey: recordID)
         continuations.removeValue(forKey: recordID)
+        streams.removeValue(forKey: recordID)
     }
 
     private func parseCommand(_ command: String) -> (executable: String, arguments: [String]) {

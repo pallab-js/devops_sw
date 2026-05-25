@@ -58,16 +58,25 @@ actor LaunchdService {
         )
         let url = plistURL(taskName: taskName)
         try plist.write(to: url, atomically: true, encoding: .utf8)
-        try runLaunchctl(["bootstrap", "gui/\(getuid())", url.path])
+        let output = try runLaunchctl(["bootstrap", "gui/\(getuid())", url.path])
+        if output.contains("error") || output.contains("failed") {
+            throw AppError.unknown(NSError(domain: "LaunchdService", code: -1, userInfo: [NSLocalizedDescriptionKey: output]))
+        }
     }
 
     func uninstall(taskName: String) throws {
         let url = plistURL(taskName: taskName)
-        try runLaunchctl(["bootout", "gui/\(getuid())", url.path])
+        _ = try runLaunchctl(["bootout", "gui/\(getuid())", url.path])
         try? FileManager.default.removeItem(at: url)
     }
 
+    func isLoaded(taskName: String) -> Bool {
+        guard let output = try? runLaunchctl(["list"]) else { return false }
+        return output.contains("com.devforge.task.\(taskName)")
+    }
+
     func listManagedAgents() throws -> [(name: String, isLoaded: Bool)] {
+        let listOutput = (try? runLaunchctl(["list"])) ?? ""
         guard let items = try? FileManager.default.contentsOfDirectory(
             at: launchAgentsDir,
             includingPropertiesForKeys: nil
@@ -77,15 +86,25 @@ actor LaunchdService {
             .map { url in
                 let name = url.deletingPathExtension().lastPathComponent
                     .replacingOccurrences(of: "com.devforge.task.", with: "")
-                return (name, true)
+                let loaded = listOutput.contains("com.devforge.task.\(name)")
+                return (name, loaded)
             }
     }
 
-    private func runLaunchctl(_ args: [String]) throws {
+    private func runLaunchctl(_ args: [String]) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.arguments = args
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
         try process.run()
         process.waitUntilExit()
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        let error = String(data: errorData, encoding: .utf8) ?? ""
+        return output + error
     }
 }

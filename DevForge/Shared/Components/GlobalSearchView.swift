@@ -6,6 +6,7 @@ struct GlobalSearchView: View {
     @State private var searchText = ""
     @State private var searchResults: [SearchResult] = []
     @State private var isSearching = false
+    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,7 +47,6 @@ struct GlobalSearchView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         dismiss()
-                        // navigate to the relevant section
                     }
                 }
                 .listStyle(.plain)
@@ -54,8 +54,13 @@ struct GlobalSearchView: View {
         }
         .frame(width: 500, height: 400)
         .onChange(of: searchText) { _, newValue in
+            searchTask?.cancel()
             guard !newValue.isEmpty else { searchResults = []; return }
-            Task { await performSearch(newValue) }
+            searchTask = Task {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                await performSearch(newValue)
+            }
         }
     }
 
@@ -69,29 +74,32 @@ struct GlobalSearchView: View {
                 try ProcessRecord.filter(Column("name").like("%\(query)%")).fetchAll(db)
             }
             results.append(contentsOf: processes.map {
-                SearchResult(title: $0.name, subtitle: $0.command, icon: "terminal.fill", category: "Process")
+                SearchResult(id: $0.id, title: $0.name, subtitle: $0.command, icon: "terminal.fill", category: "Process")
             })
 
             let envFiles: [EnvFile] = try await AppDatabase.shared.read { db in
                 try EnvFile.filter(Column("name").like("%\(query)%")).fetchAll(db)
             }
             results.append(contentsOf: envFiles.map {
-                SearchResult(title: $0.name, subtitle: $0.projectPath, icon: "lock.shield.fill", category: "Env")
+                SearchResult(id: $0.id, title: $0.name, subtitle: $0.projectPath, icon: "lock.shield.fill", category: "Env")
             })
 
             let repos: [GitRepository] = try await AppDatabase.shared.read { db in
                 try GitRepository.filter(Column("name").like("%\(query)%")).fetchAll(db)
             }
             results.append(contentsOf: repos.map {
-                SearchResult(title: $0.name, subtitle: $0.localPath, icon: "arrow.triangle.branch", category: "Git")
+                SearchResult(id: $0.id, title: $0.name, subtitle: $0.localPath, icon: "arrow.triangle.branch", category: "Git")
             })
-        } catch {}
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
         searchResults = results
     }
 }
 
 struct SearchResult: Identifiable {
-    let id = UUID()
+    let id: String
     let title: String
     let subtitle: String
     let icon: String

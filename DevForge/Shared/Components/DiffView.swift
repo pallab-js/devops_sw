@@ -13,7 +13,7 @@ struct DiffView: View {
             .font(.appMonospaceSmall)
             .padding(Spacing.xs)
         }
-        .background(.black, in: Rectangle())
+        .background(Color(.textBackgroundColor), in: Rectangle())
     }
 
     private var parsedLines: [DiffLine] {

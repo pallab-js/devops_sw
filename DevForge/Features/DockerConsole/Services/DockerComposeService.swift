@@ -29,74 +29,26 @@ actor DockerComposeService {
     }
 
     func parseComposeFile(url: URL) async throws -> [ComposeService] {
-        let data = try Data(contentsOf: url)
-        guard let yaml = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return try parseLineByLine(url: url)
-        }
-        return []
-    }
+        let result = try await ShellService.shared.runCommand(
+            executable: dockerPath(),
+            arguments: ["compose", "-f", url.path, "config", "--services"]
+        )
+        let serviceNames = result.output
+            .components(separatedBy: "\n")
+            .filter { !$0.isEmpty }
 
-    private func parseLineByLine(url: URL) throws -> [ComposeService] {
-        let content = try String(contentsOf: url, encoding: .utf8)
         var services: [ComposeService] = []
-        var currentService: String?
-        var currentImage: String?
-        var currentPorts: [String] = []
-        var currentEnv: [String: String] = [:]
-
-        for line in content.components(separatedBy: "\n") {
-            let trimmed = line.trimmed
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-
-            if trimmed.hasPrefix("services:") {
-                continue
-            }
-
-            if trimmed.hasPrefix("  ") && !trimmed.hasPrefix("    ") {
-                if let name = currentService, !name.isEmpty {
-                    let id = UUID().uuidString
-                    services.append(ComposeService(
-                        id: id, name: name,
-                        image: currentImage,
-                        ports: currentPorts,
-                        environment: currentEnv
-                    ))
-                }
-                let namePart = trimmed.trimmed
-                if namePart.hasSuffix(":") {
-                    currentService = String(namePart.dropLast()).trimmed
-                    currentImage = nil
-                    currentPorts = []
-                    currentEnv = [:]
-                }
-                continue
-            }
-
-            if trimmed.hasPrefix("image:") {
-                currentImage = String(trimmed.dropFirst(6)).trimmed
-            } else if trimmed.hasPrefix("ports:") {
-                // multi-line ports follow
-            } else if trimmed.hasPrefix("- ") && currentPorts.isEmpty == false {
-                currentPorts.append(String(trimmed.dropFirst(2)).trimmed)
-            } else if trimmed.hasPrefix("environment:") {
-                // env block follows
-            } else if trimmed.contains(": ") && !trimmed.hasPrefix(" ") {
-                let parts = trimmed.split(separator: ":", maxSplits: 1)
-                if parts.count == 2 {
-                    let key = String(parts[0]).trimmed
-                    let val = String(parts[1]).trimmed
-                    currentEnv[key] = val
-                }
-            }
-        }
-
-        if let name = currentService, !name.isEmpty {
-            let id = UUID().uuidString
+        for name in serviceNames {
+            _ = try await ShellService.shared.runCommand(
+                executable: dockerPath(),
+                arguments: ["compose", "-f", url.path, "config", "--format", "json"]
+            )
             services.append(ComposeService(
-                id: id, name: name,
-                image: currentImage,
-                ports: currentPorts,
-                environment: currentEnv
+                id: name,
+                name: name,
+                image: nil,
+                ports: [],
+                environment: [:]
             ))
         }
         return services

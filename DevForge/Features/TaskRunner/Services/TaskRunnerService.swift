@@ -4,15 +4,16 @@ import GRDB
 actor TaskRunnerService {
     static let shared = TaskRunnerService()
 
-    private var runningTask: Process?
-    private var continuation: AsyncStream<TaskOutputLine>.Continuation?
+    private var runningTasks: [String: Process] = [:]
+    private var continuations: [String: AsyncStream<TaskOutputLine>.Continuation] = [:]
 
     func run(
         task: DiscoveredTask,
         workingDirectory: String
     ) -> AsyncStream<TaskOutputLine> {
         let (stream, continuation) = AsyncStream<TaskOutputLine>.makeStream()
-        self.continuation = continuation
+        let taskID = task.id.uuidString
+        continuations[taskID] = continuation
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -25,7 +26,7 @@ actor TaskRunnerService {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        runningTask = process
+        runningTasks[taskID] = process
 
         let taskName = task.name
         let taskRun = TaskRun(taskName: taskName, command: task.command, workingDirectory: workingDirectory)
@@ -64,19 +65,39 @@ actor TaskRunnerService {
                     try run.insert(db)
                 }
                 await self?.pruneHistory(taskName: taskName)
+                await self?.cleanup(taskID: taskID)
             }
         }
 
-        try? process.run()
+        do {
+            try process.run()
+        } catch {
+            continuation.finish()
+            cleanup(taskID: taskID)
+        }
 
         return stream
     }
 
-    func cancel() {
-        runningTask?.terminate()
-        runningTask = nil
-        continuation?.finish()
-        continuation = nil
+    func cancel(taskID: String) {
+        runningTasks[taskID]?.terminate()
+        runningTasks.removeValue(forKey: taskID)
+        continuations[taskID]?.finish()
+        continuations.removeValue(forKey: taskID)
+    }
+
+    func cancelAll() {
+        for (id, process) in runningTasks {
+            process.terminate()
+            continuations[id]?.finish()
+        }
+        runningTasks.removeAll()
+        continuations.removeAll()
+    }
+
+    private func cleanup(taskID: String) {
+        runningTasks.removeValue(forKey: taskID)
+        continuations.removeValue(forKey: taskID)
     }
 
     func getHistory(taskName: String) async throws -> [TaskRun] {
