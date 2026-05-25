@@ -24,7 +24,7 @@ jobs:
           sudo installer -pkg SwiftLint.pkg -target /
 
       - name: Run SwiftLint
-        run: swiftlint lint --reporter github
+        run: swiftlint lint --reporter github --verbose
 
       - name: Build package
         run: swift build -v
