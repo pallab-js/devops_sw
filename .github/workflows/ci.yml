@@ -19,9 +19,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
       - name: Install SwiftLint
-        run: |
-          curl -L https://github.com/realm/SwiftLint/releases/download/0.63.2/SwiftLint.pkg -o SwiftLint.pkg
-          sudo installer -pkg SwiftLint.pkg -target /
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install swiftlint
 
       - name: Run SwiftLint
         run: swiftlint lint --reporter github
