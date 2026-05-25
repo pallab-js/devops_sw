@@ -5,7 +5,6 @@ type_body_length: 500
 opt_in_rules:
   - empty_count
   - trailing_whitespace
-  - unused_imports
 
 disabled_rules:
   - todo
