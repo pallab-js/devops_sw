@@ -26,7 +26,11 @@ final class AppDatabase: Sendable {
         } else {
             let fallbackURL = Self.fallbackDatabaseURL()
             try? FileManager.default.createDirectory(at: fallbackURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            pool = try! DatabasePool(path: fallbackURL.path)
+            if let p = try? DatabasePool(path: fallbackURL.path) {
+                pool = p
+            } else {
+                fatalError("Failed to initialize database")
+            }
         }
         dbPool = pool
         if let migrator = try? migrator.migrate(dbPool) {
